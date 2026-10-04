@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculator</title>
+<style>
+  :root {
+    color-scheme: dark;
+  }
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 360px;
+    margin: 0 auto;
+    padding: 0 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: #121212;
+    color: #e0e0e0;
+  }
+  input {
+    font-size: 1.2rem;
+    padding: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    background: #1e1e1e;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    border-radius: 4px;
+  }
+  /* Hide the number input's increment/decrement arrows. */
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .reverse {
+    margin-top: 48px;
+  }
+  .result {
+    margin-top: 20px;
+  }
+  /* Keep the result's space reserved while hidden so the centred
+     content doesn't jump when it appears. */
+  .result[hidden] {
+    display: block;
+    visibility: hidden;
+  }
+  .value {
+    font-size: 2rem;
+  }
+  .unit {
+    font-size: 1rem;
+    color: #999;
+  }
+  .error {
+    color: #ff6b6b;
+    margin-top: 8px;
+  }
+  .calc {
+    position: relative;
+  }
+  /* Formulas sit outside the content column, out in the right margin. */
+  .formulas {
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 24px;
+    width: max-content;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  /* On narrow screens there's no margin to use, so put them below. */
+  @media (max-width: 960px) {
+    .formulas {
+      position: static;
+      transform: none;
+      margin: 48px 0 0;
+    }
+  }
+  .formula {
+    font-size: 1.1rem;
+  }
+  /* Stop the exponent from pushing the lines apart. */
+  .formula sup {
+    font-size: 0.7em;
+    line-height: 0;
+  }
+  .legend {
+    margin-top: 8px;
+    font-size: 0.9rem;
+    color: #999;
+  }
+</style>
+</head>
+<body>
+<div class="calc">
+  <!-- Garrisoned food -> food per minute -->
+  <div>
+    <label for="food">Garrisoned food:</label>
+    <input id="food" type="number" step="any" value="0" autofocus>
+    <div id="foodError" class="error"></div>
+    <div id="rateResult" class="result" hidden>
+      <span id="rateOutput" class="value"></span> <span class="unit">Food per minute</span>
+    </div>
+  </div>
+
+  <!-- Food per minute -> garrisoned food (reverse) -->
+  <div class="reverse">
+    <label for="rate">Food per minute:</label>
+    <input id="rate" type="number" step="any" value="0">
+    <div id="rateError" class="error"></div>
+    <div id="foodResult" class="result" hidden>
+      <span id="foodOutput" class="value"></span> <span class="unit">Garrisoned food (≥<span id="sheepOutput"></span> sheep)</span>
+    </div>
+  </div>
+
+  <div class="formulas">
+    <div class="formula"><i>R</i> = 15 · ln(<i>F</i> / 200 + 1)</div>
+    <div class="formula"><i>F</i> = 200 · (<i>e</i><sup><i>R</i> / 15</sup> − 1)</div>
+    <div class="legend"><i>F</i> = garrisoned food<br><i>R</i> = food per minute</div>
+  </div>
+</div>
+
+<script>
+  function readNumber(input, error) {
+    const text = input.value.trim();
+    error.textContent = "";
+    // An empty field counts as 0 so the result stays shown.
+    if (text === "") return 0;
+
+    const n = Number(text);
+    if (!Number.isFinite(n)) {
+      error.textContent = "Please enter a number.";
+      return null;
+    }
+    return n;
+  }
+
+  // Forward: rate = 15 * ln(F / 200 + 1)
+  const food = document.getElementById("food");
+  const foodError = document.getElementById("foodError");
+  const rateResult = document.getElementById("rateResult");
+  const rateOutput = document.getElementById("rateOutput");
+
+  function showRate() {
+    rateResult.hidden = true;
+    const f = readNumber(food, foodError);
+    if (f === null) return;
+
+    // ln(F / 200 + 1) is only defined when F is greater than -200.
+    if (f <= -200) {
+      foodError.textContent = "The value must be greater than -200.";
+      return;
+    }
+
+    // Math.log1p(a) computes ln(a + 1) and stays accurate for small F.
+    const rate = 15 * Math.log1p(f / 200);
+    rateOutput.textContent = rate.toFixed(1);
+    rateResult.hidden = false;
+  }
+  food.addEventListener("input", showRate);
+
+  // Reverse: F = 200 * (e^(rate / 15) - 1)
+  const rate = document.getElementById("rate");
+  const rateError = document.getElementById("rateError");
+  const foodResult = document.getElementById("foodResult");
+  const foodOutput = document.getElementById("foodOutput");
+  const sheepOutput = document.getElementById("sheepOutput");
+
+  function showFood() {
+    foodResult.hidden = true;
+    const r = readNumber(rate, rateError);
+    if (r === null) return;
+
+    // Math.expm1(a) computes e^a - 1 and stays accurate for small rates.
+    const f = 200 * Math.expm1(r / 15);
+    if (!Number.isFinite(f)) {
+      rateError.textContent = "That rate is too large to calculate.";
+      return;
+    }
+
+    foodOutput.textContent = f.toFixed(1);
+    // A sheep holds 100 food and can't be split, so round up to whole sheep.
+    // Uses the food rounded to one decimal, as shown, so e.g. 900.0 food is
+    // 9 sheep rather than 10 from a tiny floating-point excess.
+    sheepOutput.textContent = Math.ceil(Math.round(f * 10) / 1000);
+    foodResult.hidden = false;
+  }
+  rate.addEventListener("input", showFood);
+
+  // Show both results on load (browsers can also restore typed values on reload).
+  showRate();
+  showFood();
+</script>
+</body>
+</html>
